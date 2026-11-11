@@ -36,6 +36,15 @@
         .login-screen { display: flex; justify-content: center; align-items: center; height: 100dvh; background: linear-gradient(135deg, var(--ttu-blue) 0%, #001a35 100%); position: fixed; width: 100%; top: 0; left: 0; z-index: 9999; }
         .login-card { background: white; padding: 3rem 2rem; border-radius: 2rem; width: 85%; max-width: 350px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
 
+        /* Password Wrapper for Eye Icon */
+        .password-wrapper { position: relative; width: 100%; margin-top: 5px; }
+        .password-wrapper input { padding-right: 45px; margin-top: 0; }
+        .password-toggle-btn {
+            position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+            background: none; border: none; cursor: pointer; color: #64748b;
+            display: flex; align-items: center; justify-content: center; padding: 4px;
+        }
+
         /* --- Rock Solid Sidebar --- */
         .sidebar { 
             width: 310px; background: var(--ttu-sidebar); height: 100dvh; padding: 25px; border-right: 1px solid #e2e8f0; 
@@ -59,7 +68,7 @@
         .stat-card { background: white; padding: 18px; border-radius: 1.2rem; border: 1px solid #f1f5f9; display: flex; align-items: center; gap: 12px; }
         
         label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-top: 14px; display: block; }
-        input, select { width: 100%; padding: 12px; margin-top: 5px; border: 1px solid #e2e8f0; border-radius: 12px; font-size: 16px; background: #f8fafc; color: var(--ttu-text); appearance: none; -webkit-appearance: none; outline: none; }
+        input, select { width: 100%; padding: 12px; margin-top: 5px; border: 1px solid #e2e8f0; border-radius: 12px; font-size: 16px; background: #f8fafc; color: var(--ttu-text); appearance: none; -webkit-appearance: none; outline: none; box-sizing: border-box; }
 
         .btn { padding: 14px; width: 100%; border: none; border-radius: 12px; cursor: pointer; font-weight: 700; margin-top: 12px; transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px; }
         .btn-blue { background: var(--ttu-blue); color: white; }
@@ -95,12 +104,19 @@
 </head>
 <body>
 
-    <!-- 1. LOGIN -->
+    <!-- 1. LOGIN WITH EYE TOGGLE -->
     <div id="loginScreen" class="login-screen">
         <div class="login-card">
             <div style="font-size: 40px; margin-bottom: 10px;">🛡️</div>
-            <h2 style="color: var(--ttu-blue); margin:0;">Faculty Portal</h2>
-            <input type="password" id="adminPass" placeholder="Password">
+            <h2 style="color: var(--ttu-blue); margin:0 0 15px 0;">Faculty Portal</h2>
+            
+            <div class="password-wrapper">
+                <input type="password" id="adminPass" placeholder="Password">
+                <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility()">
+                    <i id="eyeIcon" data-lucide="eye"></i>
+                </button>
+            </div>
+
             <button class="btn btn-blue" onclick="verifyAdmin()">Unlock</button>
         </div>
     </div>
@@ -116,19 +132,19 @@
             <label>Level & Department</label>
             <select id="levelInput" onchange="contextChanged()"><option>100</option><option>200</option><option selected>300</option><option>400</option></select>
             <select id="deptInput" onchange="contextChanged()">
-    <option value="Mechanical" selected>Mechanical Engineering</option>
-</select>
+                <option value="Mechanical" selected>Mechanical Engineering</option>
+            </select>
             <hr style="margin:20px 0; border: 0; border-top: 1px solid #f1f5f9;">
             
-            <label>Load History</label>
+            <label>Load Saved Course</label>
             <select id="courseHistorySelector" onchange="loadCourseFromHistory()"></select>
             
             <label>Course Name</label>
-            <input type="text" id="classNameInput" placeholder="eg. Thermodynamics" oninput="refresh()">
+            <input type="text" id="classNameInput" placeholder="eg. Applied Thermodynamics" oninput="saveCurrentInputs(); refresh();">
 
             <label>Section & Lecturer</label>
             <select id="sectionInput" onchange="autoLoadLecturer(); refresh();"><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option><option>F</option></select>
-            <input type="text" id="lecturerNameInput" placeholder="Lecturer Name">
+            <input type="text" id="lecturerNameInput" placeholder="Lecturer Name" oninput="saveCurrentInputs();">
 
             <label>Select Date</label>
             <input type="date" id="dateFilter" onchange="switchMode('daily')">
@@ -191,6 +207,47 @@
         let allSavedClasses = [];
         let currentMode = 'daily';
         let countdownTimer = null;
+
+        // --- PASSWORD VISIBILITY TOGGLE ---
+        window.togglePasswordVisibility = () => {
+            const passInput = document.getElementById('adminPass');
+            const icon = document.getElementById('eyeIcon');
+            if (passInput.type === "password") {
+                passInput.type = "text";
+                icon.setAttribute("data-lucide", "eye-off");
+            } else {
+                passInput.type = "password";
+                icon.setAttribute("data-lucide", "eye");
+            }
+            lucide.createIcons();
+        };
+        lucide.createIcons();
+
+        // --- SAVE & RESTORE LAST INPUTS LOCALLY ---
+        window.saveCurrentInputs = () => {
+            const course = document.getElementById('classNameInput').value;
+            const lecturer = document.getElementById('lecturerNameInput').value;
+            const level = document.getElementById('levelInput').value;
+            const section = document.getElementById('sectionInput').value;
+            
+            if (course) localStorage.setItem(`saved_course_${level}_${section}`, course);
+            if (lecturer) localStorage.setItem(`saved_lecturer_${level}_${section}`, lecturer);
+        };
+
+        function restoreLastInputs() {
+            const level = document.getElementById('levelInput').value;
+            const section = document.getElementById('sectionInput').value;
+            
+            const savedCourse = localStorage.getItem(`saved_course_${level}_${section}`);
+            const savedLecturer = localStorage.getItem(`saved_lecturer_${level}_${section}`);
+
+            if (savedCourse && !document.getElementById('classNameInput').value) {
+                document.getElementById('classNameInput').value = savedCourse;
+            }
+            if (savedLecturer && !document.getElementById('lecturerNameInput').value) {
+                document.getElementById('lecturerNameInput').value = savedLecturer;
+            }
+        }
         
         window.toggleSidebar = () => {
             const isAct = document.getElementById('sidebar').classList.toggle('active');
@@ -218,12 +275,18 @@
             document.getElementById('classNameInput').value = ""; 
             document.getElementById('lecturerNameInput').value = ""; 
             updateHistoryList(); 
+            restoreLastInputs();
             switchMode('daily'); 
         };
 
         async function loadAllClassesFromDB() {
             const { data } = await supabase.from('classes').select('*').order('name');
-            if (data) { allSavedClasses = data; updateHistoryList(); refresh(); }
+            if (data) { 
+                allSavedClasses = data; 
+                updateHistoryList(); 
+                restoreLastInputs();
+                refresh(); 
+            }
         }
 
         window.updateHistoryList = () => {
@@ -231,28 +294,34 @@
             const matches = allSavedClasses.filter(c => c.level === level && c.department === dept);
             const uniqueNames = [...new Set(matches.map(c => c.name))];
             const sel = document.getElementById('courseHistorySelector');
-            sel.innerHTML = uniqueNames.length > 0 ? '<option value="">-- Select Course --</option>' : '<option value="">-- No matches --</option>';
+            sel.innerHTML = uniqueNames.length > 0 ? '<option value="">-- Select Saved Course --</option>' : '<option value="">-- No matches --</option>';
             uniqueNames.forEach(n => { const o = document.createElement('option'); o.value = n; o.innerText = n; sel.appendChild(o); });
         };
 
         window.loadCourseFromHistory = () => {
             const n = document.getElementById('courseHistorySelector').value;
-            if (!n) return; document.getElementById('classNameInput').value = n; autoLoadLecturer();
+            if (!n) return; 
+            document.getElementById('classNameInput').value = n; 
+            autoLoadLecturer();
+            saveCurrentInputs();
         };
 
         window.autoLoadLecturer = () => {
             const n = document.getElementById('classNameInput').value, s = document.getElementById('sectionInput').value, l = document.getElementById('levelInput').value, d = document.getElementById('deptInput').value;
-            if (!n) return;
+            
+            // Try matching from Database first
             const match = allSavedClasses.find(c => c.name === n && c.section === s && c.level === l && c.department === d);
             if (match) {
                 document.getElementById('lecturerNameInput').value = match.lecturer_name;
-                // If there is an active session, display the timer
                 if (match.expires_at && new Date(match.expires_at) > new Date()) {
                     startCountdownDisplay(match.expires_at);
                 }
             } else { 
-                const generic = allSavedClasses.find(c => c.name === n && c.level === l && c.department === d); 
-                document.getElementById('lecturerNameInput').value = generic ? generic.lecturer_name : ""; 
+                // Or fallback to saved local history
+                const savedLecturer = localStorage.getItem(`saved_lecturer_${l}_${s}`);
+                if (savedLecturer) {
+                    document.getElementById('lecturerNameInput').value = savedLecturer;
+                }
             }
             refresh();
         };
@@ -305,20 +374,24 @@
             lucide.createIcons();
         };
 
-        // --- GPS SYNC & TIME LIMIT ---
+        // --- GPS SYNC, TIME LIMIT & PERMANENT DB SAVE ---
         window.updateRoomGPS = () => {
             const l = document.getElementById('levelInput').value, d = document.getElementById('deptInput').value, c = document.getElementById('classNameInput').value, s = document.getElementById('sectionInput').value, lec = document.getElementById('lecturerNameInput').value;
             const durationMins = parseInt(document.getElementById('durationInput').value) || 10;
 
             if(!c || !lec) return alert("Fill course and lecturer details!");
+            
+            // Save inputs locally immediately
+            saveCurrentInputs();
+
             const cid = `${d}_${l}_${c.replace(/\s+/g, '_')}_${s}`.toLowerCase();
             const btn = document.getElementById('gpsBtn'); 
             btn.innerHTML = "⏳ Syncing GPS..."; btn.disabled = true;
 
             navigator.geolocation.getCurrentPosition(async (p) => {
-                // Calculate expiration timestamp (now + chosen minutes)
                 const expiresAt = new Date(Date.now() + durationMins * 60 * 1000).toISOString();
 
+                // Save to database permanently
                 await supabase.from('classes').upsert({ 
                     id: cid, 
                     name: c, 
@@ -333,7 +406,7 @@
 
                 startCountdownDisplay(expiresAt);
 
-                alert(`GPS Updated! Attendance is OPEN for ${durationMins} minutes.`); 
+                alert(`Saved! GPS updated & Attendance is OPEN for ${durationMins} minutes.`); 
                 if(window.innerWidth < 1024) toggleSidebar(); 
                 loadAllClassesFromDB(); 
                 btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open'; 
@@ -374,7 +447,6 @@
             
             if (!confirm("Are you sure you want to close attendance now?")) return;
 
-            // Set expiration to right now
             await supabase.from('classes').update({ expires_at: new Date().toISOString() }).eq('id', cid);
             clearInterval(countdownTimer);
             document.getElementById('sessionTimer').style.display = 'none';
