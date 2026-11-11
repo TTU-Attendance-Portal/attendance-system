@@ -213,17 +213,15 @@
 
         // When Level or Department changes
         window.contextChanged = () => { 
-            document.getElementById('classNameInput').value = ""; 
-            document.getElementById('lecturerNameInput').value = ""; 
-            updateHistoryList(); 
+            updateHistoryList();
+            autoLoadCurrentSectionClass();
             switchMode('daily'); 
         };
 
-        // When Section changes (A -> B, etc.), clear inputs so Section B doesn't inherit Section A
+        // When Section changes (A -> B, etc.), automatically load Section B's specific course
         window.sectionChanged = () => {
-            document.getElementById('classNameInput').value = "";
-            document.getElementById('lecturerNameInput').value = "";
             updateHistoryList();
+            autoLoadCurrentSectionClass();
             refresh();
         };
 
@@ -232,20 +230,24 @@
             if (data) { 
                 allSavedClasses = data; 
                 updateHistoryList(); 
+                autoLoadCurrentSectionClass();
                 refresh(); 
             }
         }
 
         // STRICTLY FILTER BY THIS SPECIFIC LEVEL, DEPT, AND SECTION
         window.updateHistoryList = () => {
-            const level = document.getElementById('levelInput').value;
-            const dept = document.getElementById('deptInput').value;
-            const section = document.getElementById('sectionInput').value;
+            const level = document.getElementById('levelInput').value.trim();
+            const dept = document.getElementById('deptInput').value.trim();
+            const section = document.getElementById('sectionInput').value.trim();
 
-            // Only show courses saved specifically for this Level AND Section!
-            const matches = allSavedClasses.filter(c => c.level === level && c.department === dept && c.section === section);
+            const matches = allSavedClasses.filter(c => 
+                String(c.level).trim() === level && 
+                String(c.department).trim().toLowerCase() === dept.toLowerCase() && 
+                String(c.section).trim().toUpperCase() === section.toUpperCase()
+            );
+
             const sel = document.getElementById('courseHistorySelector');
-
             if (matches.length > 0) {
                 sel.innerHTML = '<option value="">-- Select Saved Course --</option>';
                 matches.forEach(c => { 
@@ -259,32 +261,59 @@
             }
         };
 
-        // LOAD ONLY WHAT BELONGS TO THIS SECTION
-        window.loadCourseFromHistory = () => {
-            const n = document.getElementById('courseHistorySelector').value;
-            if (!n) {
+        // AUTOMATICALLY LOAD ONLY THIS SECTION'S DETAILS
+        window.autoLoadCurrentSectionClass = () => {
+            const level = document.getElementById('levelInput').value.trim();
+            const dept = document.getElementById('deptInput').value.trim();
+            const section = document.getElementById('sectionInput').value.trim();
+
+            const matches = allSavedClasses.filter(c => 
+                String(c.level).trim() === level && 
+                String(c.department).trim().toLowerCase() === dept.toLowerCase() && 
+                String(c.section).trim().toUpperCase() === section.toUpperCase()
+            );
+
+            if (matches.length > 0) {
+                // Load this section's own saved course!
+                const latest = matches[0];
+                document.getElementById('classNameInput').value = latest.name;
+                document.getElementById('lecturerNameInput').value = latest.lecturer_name || "";
+                if (latest.expires_at && new Date(latest.expires_at) > new Date()) {
+                    startCountdownDisplay(latest.expires_at);
+                } else {
+                    document.getElementById('sessionTimer').style.display = 'none';
+                    document.getElementById('stopBtn').style.display = 'none';
+                }
+            } else {
+                // If Section has no course saved yet, LEAVE BLANK so other sections don't bleed in
                 document.getElementById('classNameInput').value = "";
                 document.getElementById('lecturerNameInput').value = "";
-                refresh();
-                return;
+                document.getElementById('sessionTimer').style.display = 'none';
+                document.getElementById('stopBtn').style.display = 'none';
             }
+        };
+
+        window.loadCourseFromHistory = () => {
+            const n = document.getElementById('courseHistorySelector').value;
+            if (!n) return;
 
             document.getElementById('classNameInput').value = n;
-            
-            const level = document.getElementById('levelInput').value;
-            const dept = document.getElementById('deptInput').value;
-            const section = document.getElementById('sectionInput').value;
+            const level = document.getElementById('levelInput').value.trim();
+            const dept = document.getElementById('deptInput').value.trim();
+            const section = document.getElementById('sectionInput').value.trim();
 
-            // Strictly match this Section only (NO generic fallback!)
-            const match = allSavedClasses.find(c => c.name === n && c.section === section && c.level === level && c.department === dept);
+            const match = allSavedClasses.find(c => 
+                c.name === n && 
+                String(c.section).trim().toUpperCase() === section.toUpperCase() && 
+                String(c.level).trim() === level && 
+                String(c.department).trim().toLowerCase() === dept.toLowerCase()
+            );
             
             if (match) {
                 document.getElementById('lecturerNameInput').value = match.lecturer_name || "";
                 if (match.expires_at && new Date(match.expires_at) > new Date()) {
                     startCountdownDisplay(match.expires_at);
                 }
-            } else {
-                document.getElementById('lecturerNameInput').value = "";
             }
             refresh();
         };
@@ -316,7 +345,7 @@
                 document.getElementById('qrImage').src = "";
                 document.getElementById('mainTitle').innerText = `Select or type course for Section ${s}`;
                 document.getElementById('subTitle').innerText = `${d} | Level ${l} | Section ${s}`;
-                document.getElementById('list').innerHTML = "<tr><td colspan='4' style='text-align:center; padding:40px;'>Select a course to view records.</td></tr>";
+                document.getElementById('list').innerHTML = "<tr><td colspan='4' style='text-align:center; padding:40px;'>Select or enter a course to view records.</td></tr>";
                 document.getElementById('count').innerText = 0;
                 return;
             }
@@ -349,59 +378,100 @@
             lucide.createIcons();
         };
 
-        // --- GPS SYNC & TIME LIMIT ---
+        // --- GPS SYNC WITH BULLETPROOF TIMEOUT & INDEPENDENT SECTION SAVING ---
         window.updateRoomGPS = () => {
-            const l = document.getElementById('levelInput').value;
-            const d = document.getElementById('deptInput').value;
+            const l = document.getElementById('levelInput').value.trim();
+            const d = document.getElementById('deptInput').value.trim();
             const c = document.getElementById('classNameInput').value.trim();
-            const s = document.getElementById('sectionInput').value;
+            const s = document.getElementById('sectionInput').value.trim();
             const lec = document.getElementById('lecturerNameInput').value.trim();
             const durationMins = parseInt(document.getElementById('durationInput').value) || 10;
 
-            if(!c || !lec) return alert("Fill course and lecturer details!");
-            
-            // Unique ID per section: eg. mechanical_300_thermo_a
+            if(!c || !lec) return alert("Please fill in both Course Name and Lecturer Name!");
+
             const cid = `${d}_${l}_${c.replace(/\s+/g, '_')}_${s}`.toLowerCase();
             const btn = document.getElementById('gpsBtn'); 
-            btn.innerHTML = "⏳ Syncing GPS..."; btn.disabled = true;
+            btn.innerHTML = "⏳ Syncing GPS..."; 
+            btn.disabled = true;
 
-            navigator.geolocation.getCurrentPosition(async (p) => {
-                const expiresAt = new Date(Date.now() + durationMins * 60 * 1000).toISOString();
+            let isHandled = false;
 
-                const { error } = await supabase.from('classes').upsert({ 
-                    id: cid, 
-                    name: c, 
-                    department: d, 
-                    level: l, 
-                    section: s, 
-                    lecturer_name: lec, 
-                    lat: p.coords.latitude, 
-                    lng: p.coords.longitude,
-                    expires_at: expiresAt 
-                });
-
-                if (error) {
-                    alert("❌ Save error: " + error.message);
+            // Safety emergency timeout: never leave the button stuck
+            const emergencyTimer = setTimeout(() => {
+                if (!isHandled) {
+                    isHandled = true;
                     btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open';
                     btn.disabled = false;
                     lucide.createIcons();
-                    return;
+                    alert("GPS took too long to respond. Please ensure location is enabled and try again.");
                 }
+            }, 12000);
 
-                startCountdownDisplay(expiresAt);
+            const saveLocation = async (pos) => {
+                if (isHandled) return;
+                isHandled = true;
+                clearTimeout(emergencyTimer);
 
-                alert(`GPS Updated for Section ${s}! Open for ${durationMins} minutes.`); 
-                if(window.innerWidth < 1024) toggleSidebar(); 
-                loadAllClassesFromDB(); 
-                btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open'; 
-                btn.disabled = false;
-                lucide.createIcons();
-            }, (e) => { 
-                alert("GPS Lock Failed: " + e.message); 
-                btn.disabled = false; 
-                btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open';
-                lucide.createIcons();
-            }, {enableHighAccuracy:true});
+                try {
+                    const expiresAt = new Date(Date.now() + durationMins * 60 * 1000).toISOString();
+
+                    // Saves strictly for THIS section
+                    const { error } = await supabase.from('classes').upsert({ 
+                        id: cid, 
+                        name: c, 
+                        department: d, 
+                        level: l, 
+                        section: s, 
+                        lecturer_name: lec, 
+                        lat: pos.coords.latitude, 
+                        lng: pos.coords.longitude,
+                        expires_at: expiresAt 
+                    });
+
+                    if (error) {
+                        alert("❌ Save error: " + error.message);
+                        btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open';
+                        btn.disabled = false;
+                        lucide.createIcons();
+                        return;
+                    }
+
+                    startCountdownDisplay(expiresAt);
+                    alert(`✅ GPS Saved for Section ${s}! Session open for ${durationMins} minutes.`); 
+                    if(window.innerWidth < 1024) toggleSidebar(); 
+                    await loadAllClassesFromDB(); 
+                    btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open'; 
+                    btn.disabled = false;
+                    lucide.createIcons();
+                } catch (err) {
+                    alert("Error saving: " + err.message);
+                    btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open';
+                    btn.disabled = false;
+                    lucide.createIcons();
+                }
+            };
+
+            // Try high accuracy with an 8s timeout; if it fails (indoors/laptop), fall back to standard accuracy
+            navigator.geolocation.getCurrentPosition(
+                saveLocation, 
+                () => {
+                    // Fallback to standard location (works indoors & on PC Wi-Fi)
+                    navigator.geolocation.getCurrentPosition(
+                        saveLocation,
+                        (err) => {
+                            if (isHandled) return;
+                            isHandled = true;
+                            clearTimeout(emergencyTimer);
+                            btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open';
+                            btn.disabled = false;
+                            lucide.createIcons();
+                            alert("❌ GPS Lock Failed: " + err.message + ". Please allow location access.");
+                        },
+                        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+                    );
+                }, 
+                { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
+            );
         };
 
         function startCountdownDisplay(expiresAtStr) {
@@ -428,10 +498,10 @@
         }
 
         window.endAttendanceEarly = async () => {
-            const l = document.getElementById('levelInput').value;
-            const d = document.getElementById('deptInput').value;
+            const l = document.getElementById('levelInput').value.trim();
+            const d = document.getElementById('deptInput').value.trim();
             const c = document.getElementById('classNameInput').value.trim();
-            const s = document.getElementById('sectionInput').value;
+            const s = document.getElementById('sectionInput').value.trim();
             const cid = `${d}_${l}_${c.replace(/\s+/g, '_')}_${s}`.toLowerCase();
             
             if (!confirm(`Are you sure you want to close attendance for Section ${s} now?`)) return;
