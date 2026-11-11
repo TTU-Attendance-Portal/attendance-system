@@ -43,7 +43,7 @@
 </head>
 <body>
 
-<div class="header"><h1>Deprtment Of Mechanical engineering</h1></div>
+<div class="header"><h1>Department Of Mechanical Engineering</h1></div>
 
 <div class="container">
     <div class="card" id="main-content">
@@ -160,11 +160,26 @@
     const deviceId = getHardwareID();
 
     async function init() {
-        const { data } = await supabase.from('classes').select('name').eq('id', classId).single();
+        const { data } = await supabase.from('classes').select('name, expires_at').eq('id', classId).single();
         document.getElementById('class-title').innerText = data?.name || "Attendance Sign-in";
         
+        // 1. CHECK IF TIME EXPIRED
+        if (data?.expires_at) {
+            const isExpired = new Date() > new Date(data.expires_at);
+            if (isExpired) {
+                document.getElementById('main-content').innerHTML = `
+                    <h2>⛔ Attendance Closed</h2>
+                    <p>The time limit for this attendance session has expired.</p>
+                `;
+                return;
+            }
+        }
+
+        // 2. CHECK IF DEVICE ALREADY SIGNED IN
         const { data: lock } = await supabase.from('attendance').select('id').eq('device_id', deviceId).eq('class_id', classId).gte('created_at', today + 'T00:00:00Z');
-        if (lock?.length > 0) document.getElementById('main-content').innerHTML = "<h2>✅ Verified</h2><p>Attendance already recorded for today.</p>";
+        if (lock?.length > 0) {
+            document.getElementById('main-content').innerHTML = "<h2>✅ Verified</h2><p>Attendance already recorded for today.</p>";
+        }
     }
     init();
 
@@ -176,12 +191,15 @@
             const dist = getDist(sLat, sLng, loc.lat, loc.lng);
             const status = document.getElementById('status-msg');
             const btn = document.getElementById('submit-btn');
-            if (dist <= 0.1) { // 100m
-                status.innerText = "📍 Location Verified"; status.className = "success";
-                btn.disabled = false; btn.innerText = "Confirm Attendance";
-            } else {
-                status.innerText = `❌ Outside Range (${Math.round(dist*1000)}m)`; status.className = "error";
-                btn.disabled = true; btn.innerText = "Out of Range";
+            
+            if (status && btn) {
+                if (dist <= 0.1) { // 100m
+                    status.innerText = "📍 Location Verified"; status.className = "success";
+                    btn.disabled = false; btn.innerText = "Confirm Attendance";
+                } else {
+                    status.innerText = `❌ Outside Range (${Math.round(dist*1000)}m)`; status.className = "error";
+                    btn.disabled = true; btn.innerText = "Out of Range";
+                }
             }
         }
     }, null, { enableHighAccuracy: true });
@@ -207,9 +225,21 @@
             return alert("Invalid Index Number! Format must be like: DP/CEA/24/112");
         }
 
+        // 1. Double check expiration before inserting (in case timer ran out while typing)
+        const { data: classCheck } = await supabase.from('classes').select('expires_at').eq('id', classId).single();
+        if (classCheck?.expires_at && new Date() > new Date(classCheck.expires_at)) {
+            document.getElementById('main-content').innerHTML = `
+                <h2>⛔ Attendance Closed</h2>
+                <p>The time limit for this attendance session has expired.</p>
+            `;
+            return alert("Time's up! The attendance session has expired.");
+        }
+
+        // 2. Check if student already signed in today
         const { data: check } = await supabase.from('attendance').select('id').eq('index_number', index).eq('class_id', classId).gte('created_at', today + 'T00:00:00Z');
         if (check?.length > 0) return alert("Index number already signed in!");
 
+        // 3. Save attendance
         const { error } = await supabase.from('attendance').insert([{ student: name, index_number: index, class_id: classId, lat: sLat, lng: sLng, device_id: deviceId }]);
         if (!error) document.getElementById('main-content').innerHTML = "<h2>✅ Success</h2><p>Attendance record secured.</p>";
     };
