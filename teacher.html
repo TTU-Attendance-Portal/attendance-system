@@ -90,6 +90,10 @@
         .mode-badge { padding: 4px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase; }
         .mode-daily { background: #e0f2fe; color: #0369a1; }
         .mode-semester { background: #fef3c7; color: #92400e; }
+
+        /* Pulse green dot indicating active live feed */
+        .live-dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block; margin-right: 6px; box-shadow: 0 0 0 rgba(16, 185, 129, 0.4); animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); } 70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
     </style>
 </head>
 <body>
@@ -175,7 +179,12 @@
                 </div>
                 <div class="stat-card">
                     <div style="background: #dcfce7; color: #15803d; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center;"><i data-lucide="radio" size="20"></i></div>
-                    <div><label style="margin:0">Monitoring</label><div id="modeDisplay" class="mode-badge mode-daily">Daily</div></div>
+                    <div>
+                        <label style="margin:0">Monitoring</label>
+                        <div id="modeDisplay" class="mode-badge mode-daily">
+                            <span class="live-dot"></span>Live Daily
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -191,12 +200,11 @@
         </div>
     </div>
 
-    <!-- THIS IS THE SCRIPT AT THE BOTTOM -->
     <script type="module">
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
         const supabase = createClient('https://tnscsgqogoqrwdohytki.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRuc2NzZ3FvZ29xcndkb2h5dGtpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MTcwMjQsImV4cCI6MjA5NTE5MzAyNH0.Xy-QKWBrYXIMP7M_lBmW4SnUxlBpnbm_Poatd8W5Ph4');
 
-        // Immediately render icons on page load
+        // Immediately render icons on load
         lucide.createIcons();
 
         let allSavedClasses = [];
@@ -342,11 +350,13 @@
             currentMode = mode;
             const display = document.getElementById('modeDisplay');
             if (mode === 'daily') {
-                display.innerText = "Daily"; display.className = "mode-badge mode-daily";
+                display.innerHTML = `<span class="live-dot"></span>Live Daily`; 
+                display.className = "mode-badge mode-daily";
                 document.getElementById('countLabel').innerText = "Present Today";
                 document.getElementById('tableHeader').innerHTML = "<th>Time</th><th>Student Name</th><th>Index No.</th><th>Status</th>";
             } else {
-                display.innerText = "Semester"; display.className = "mode-badge mode-semester";
+                display.innerHTML = `Semester`; 
+                display.className = "mode-badge mode-semester";
                 document.getElementById('countLabel').innerText = "Unique Total";
                 document.getElementById('tableHeader').innerHTML = "<th>Rank</th><th>Student Name</th><th>Index No.</th><th>Total Presence</th>";
             }
@@ -354,7 +364,7 @@
             refresh();
         };
 
-        // REFRESH & LOAD ATTENDANCE RECORDS
+        // LOAD ATTENDANCE RECORDS
         window.refresh = async () => {
             const l = document.getElementById('levelInput').value;
             const d = document.getElementById('deptInput').value;
@@ -451,7 +461,7 @@
 
                 if (error) {
                     alert("Database Error: " + error.message);
-                    btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS';
+                    btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open';
                     btn.disabled = false;
                     lucide.createIcons();
                     return;
@@ -461,13 +471,13 @@
                 alert(`Room GPS Updated for Section ${s}! Session open for ${durationMins} minutes.`); 
                 if(window.innerWidth < 1024) toggleSidebar(); 
                 await loadAllClassesFromDB(); 
-                btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS'; 
+                btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open'; 
                 btn.disabled = false;
                 lucide.createIcons();
             }, (e) => { 
                 alert("GPS Lock Failed: " + e.message); 
                 btn.disabled = false; 
-                btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS';
+                btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open';
                 lucide.createIcons();
             }, { enableHighAccuracy: false, timeout: 10000 });
         };
@@ -526,20 +536,27 @@
             ln.download = `TTU_${c}_Sec${s}_${currentMode}.csv`; ln.click();
         };
 
-        // 1. SUPABASE REALTIME (Updates immediately)
-        supabase.channel('attendance-live')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, () => {
-                if(currentMode === 'daily') refresh();
-            })
-            .subscribe();
+        // 1. DEDICATED SUPABASE REALTIME WEBSOCKET (Instant trigger)
+        supabase.channel('custom-attendance-channel')
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'attendance' },
+                () => {
+                    if (currentMode === 'daily') refresh();
+                }
+            )
+            .subscribe((status) => {
+                console.log("Realtime Live Connection Status:", status);
+            });
 
-        // 2. AUTO-POLLING BACKUP (Checks every 3 seconds so attendance is guaranteed to show live)
+        // 2. AUTOMATIC 2-SECOND LIVE SYNC (Guarantees immediate appearance even if WebSocket lags)
         setInterval(() => {
             const adminOpen = document.getElementById('adminWrapper').style.display === 'block';
-            if (adminOpen && currentMode === 'daily') {
+            const courseInput = document.getElementById('classNameInput').value.trim();
+            if (adminOpen && currentMode === 'daily' && courseInput) {
                 refresh();
             }
-        }, 3000);
+        }, 2000);
     </script>
 </body>
 </html>
