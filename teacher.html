@@ -376,23 +376,25 @@
 
         // --- GPS SYNC, TIME LIMIT & PERMANENT DB SAVE ---
         window.updateRoomGPS = () => {
-            const l = document.getElementById('levelInput').value, d = document.getElementById('deptInput').value, c = document.getElementById('classNameInput').value, s = document.getElementById('sectionInput').value, lec = document.getElementById('lecturerNameInput').value;
+            const l = document.getElementById('levelInput').value;
+            const d = document.getElementById('deptInput').value;
+            const c = document.getElementById('classNameInput').value.trim();
+            const s = document.getElementById('sectionInput').value;
+            const lec = document.getElementById('lecturerNameInput').value.trim();
             const durationMins = parseInt(document.getElementById('durationInput').value) || 10;
 
-            if(!c || !lec) return alert("Fill course and lecturer details!");
-            
-            // Save inputs locally immediately
-            saveCurrentInputs();
+            if(!c || !lec) return alert("Please fill in both Course Name and Lecturer Name!");
 
             const cid = `${d}_${l}_${c.replace(/\s+/g, '_')}_${s}`.toLowerCase();
             const btn = document.getElementById('gpsBtn'); 
-            btn.innerHTML = "⏳ Syncing GPS..."; btn.disabled = true;
+            btn.innerHTML = "⏳ Syncing GPS..."; 
+            btn.disabled = true;
 
             navigator.geolocation.getCurrentPosition(async (p) => {
                 const expiresAt = new Date(Date.now() + durationMins * 60 * 1000).toISOString();
 
-                // Save to database permanently
-                await supabase.from('classes').upsert({ 
+                // UPSERT TO SUPABASE WITH ERROR CATCHING
+                const { error } = await supabase.from('classes').upsert({ 
                     id: cid, 
                     name: c, 
                     department: d, 
@@ -404,42 +406,29 @@
                     expires_at: expiresAt 
                 });
 
+                if (error) {
+                    alert("❌ Supabase Save Failed: " + error.message);
+                    btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open';
+                    btn.disabled = false;
+                    lucide.createIcons();
+                    return;
+                }
+
                 startCountdownDisplay(expiresAt);
 
-                alert(`Saved! GPS updated & Attendance is OPEN for ${durationMins} minutes.`); 
+                alert(`✅ Success! Class saved to database and open for ${durationMins} mins.`); 
                 if(window.innerWidth < 1024) toggleSidebar(); 
                 loadAllClassesFromDB(); 
                 btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open'; 
                 btn.disabled = false;
                 lucide.createIcons();
             }, (e) => { 
-                alert("GPS Lock Failed."); 
+                alert("GPS Lock Failed: " + e.message); 
+                btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open';
                 btn.disabled = false; 
-            }, {enableHighAccuracy:true});
+                lucide.createIcons();
+            }, { enableHighAccuracy: true });
         };
-
-        function startCountdownDisplay(expiresAtStr) {
-            const timerBox = document.getElementById('sessionTimer');
-            const timeLeftSpan = document.getElementById('timeLeft');
-            const stopBtn = document.getElementById('stopBtn');
-
-            timerBox.style.display = 'block';
-            stopBtn.style.display = 'flex';
-
-            clearInterval(countdownTimer);
-            countdownTimer = setInterval(() => {
-                const diff = new Date(expiresAtStr).getTime() - Date.now();
-                if (diff <= 0) {
-                    clearInterval(countdownTimer);
-                    timeLeftSpan.innerText = "EXPIRED";
-                    stopBtn.style.display = 'none';
-                    return;
-                }
-                const m = Math.floor(diff / 60000);
-                const s = Math.floor((diff % 60000) / 1000);
-                timeLeftSpan.innerText = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-            }, 1000);
-        }
 
         window.endAttendanceEarly = async () => {
             const l = document.getElementById('levelInput').value, d = document.getElementById('deptInput').value, c = document.getElementById('classNameInput').value, s = document.getElementById('sectionInput').value;
