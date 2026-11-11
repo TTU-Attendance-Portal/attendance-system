@@ -26,6 +26,13 @@
         label { display: block; font-size: 0.7rem; font-weight: 700; color: #475569; text-transform: uppercase; margin-bottom: 0.5rem; }
         input { width: 100%; padding: 0.9rem; border: 1px solid #e2e8f0; border-radius: 0.7rem; box-sizing: border-box; font-size: 16px; transition: all 0.2s; }
         input:focus { border-color: var(--ttu-blue); outline: none; box-shadow: 0 0 0 3px rgba(0,64,133,0.1); }
+        
+        /* Auto Caps & Validation Styling for Index input */
+        #index { text-transform: uppercase; }
+        #index.invalid { border-color: #dc2626; }
+        #index.valid { border-color: #16a34a; }
+        .error-msg { color: #dc2626; font-size: 0.75rem; font-weight: 600; margin-top: 0.4rem; display: none; }
+
         .btn-submit { width: 100%; padding: 1rem; border: none; border-radius: 0.7rem; background: var(--ttu-blue); color: white; font-weight: 700; cursor: pointer; font-size: 1rem; transition: 0.3s; margin-top: 10px; }
         .btn-submit:disabled { background: #cbd5e1; cursor: not-allowed; }
         #status-msg { margin-top: 1.5rem; padding: 0.8rem; border-radius: 0.6rem; font-size: 0.8rem; font-weight: 600; text-align: center; }
@@ -45,12 +52,20 @@
         
         <div class="form-group">
             <label>Full Student Name</label>
-            <input type="text" id="name" placeholder="eg. John Mensah">
+            <input type="text" id="name" placeholder="eg. John Mensah" required>
         </div>
 
         <div class="form-group">
             <label>Index Number</label>
-            <input type="text" id="index" placeholder="eg. 01234567">
+            <input 
+                type="text" 
+                id="index" 
+                placeholder="eg. DP/CEA/24/112" 
+                maxlength="13" 
+                autocomplete="off" 
+                required
+            >
+            <div id="index-error" class="error-msg">Invalid format. Must match eg. DP/CEA/24/112</div>
         </div>
 
         <button id="submit-btn" class="btn-submit" onclick="submitAttendance()" disabled>Verifying Location...</button>
@@ -59,6 +74,72 @@
 </div>
 
 <div class="footer">OFFICIAL TTU ATTENDANCE PORTAL<br>&copy; 2024 Faculty of Engineering</div>
+
+<script>
+    // INDEX NUMBER AUTO-FORMATTING & VALIDATION
+    const indexInput = document.getElementById('index');
+    const indexError = document.getElementById('index-error');
+    // Strictly requires: 2 Letters / 3 Letters / 2 Numbers / exactly 3 Numbers
+    const indexPattern = /^[A-Z]{2}\/[A-Z]{3}\/\d{2}\/\d{3}$/;
+
+    indexInput.addEventListener('input', function (e) {
+        if (e.inputType === 'deleteContentBackward') {
+            validateIndex();
+            return;
+        }
+
+        let raw = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        let formatted = '';
+
+        for (let i = 0; i < raw.length && formatted.length < 13; i++) {
+            let char = raw[i];
+            let count = formatted.replace(/\//g, '').length;
+
+            if (count < 2) {
+                if (/[A-Z]/.test(char)) formatted += char;
+            } else if (count < 5) {
+                if (formatted.length === 2) formatted += '/';
+                if (/[A-Z]/.test(char)) formatted += char;
+            } else if (count < 7) {
+                if (formatted.length === 6) formatted += '/';
+                if (/[0-9]/.test(char)) formatted += char;
+            } else if (count < 10) {
+                // Last part: exactly 3 figures
+                if (formatted.length === 9) formatted += '/';
+                if (/[0-9]/.test(char)) formatted += char;
+            }
+        }
+
+        this.value = formatted;
+        validateIndex();
+    });
+
+    indexInput.addEventListener('blur', function () {
+        if (this.value.trim() !== '') {
+            validateIndex(true);
+        }
+    });
+
+    function validateIndex(showError = false) {
+        const val = indexInput.value.trim();
+        if (indexPattern.test(val)) {
+            indexInput.classList.remove('invalid');
+            indexInput.classList.add('valid');
+            indexError.style.display = 'none';
+            return true;
+        } else {
+            indexInput.classList.remove('valid');
+            if (showError || val.length === 13) {
+                indexInput.classList.add('invalid');
+                indexError.style.display = 'block';
+            } else {
+                indexInput.classList.remove('invalid');
+                indexError.style.display = 'none';
+            }
+            return false;
+        }
+    }
+</script>
 
 <script type="module">
     import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
@@ -112,8 +193,19 @@
     }
 
     window.submitAttendance = async () => {
-        const name = document.getElementById('name').value, index = document.getElementById('index').value;
-        if(!name || !index) return alert("Please fill all fields");
+        const name = document.getElementById('name').value.trim();
+        const index = document.getElementById('index').value.trim();
+
+        if(!name) return alert("Please enter your full name.");
+        
+        // Strict verification: Reject if index format is incorrect
+        const indexPattern = /^[A-Z]{2}\/[A-Z]{3}\/\d{2}\/\d{3}$/;
+        if (!indexPattern.test(index)) {
+            document.getElementById('index').classList.add('invalid');
+            document.getElementById('index-error').style.display = 'block';
+            document.getElementById('index').focus();
+            return alert("Invalid Index Number! Format must be like: DP/CEA/24/112");
+        }
 
         const { data: check } = await supabase.from('attendance').select('id').eq('index_number', index).eq('class_id', classId).gte('created_at', today + 'T00:00:00Z');
         if (check?.length > 0) return alert("Index number already signed in!");
