@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Faculty Admin | TTU Engineering</title>
+    <title>Department Admin | TTU Mechanical Engineering</title>
     
     <link rel="manifest" href="manifest.json">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -35,6 +35,8 @@
         /* --- Login Screen --- */
         .login-screen { display: flex; justify-content: center; align-items: center; height: 100dvh; background: linear-gradient(135deg, var(--ttu-blue) 0%, #001a35 100%); position: fixed; width: 100%; top: 0; left: 0; z-index: 9999; }
         .login-card { background: white; padding: 3rem 2rem; border-radius: 2rem; width: 85%; max-width: 350px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+        .pass-wrapper { position: relative; display: flex; align-items: center; margin-top: 15px; }
+        .pass-toggle { position: absolute; right: 14px; cursor: pointer; color: #64748b; display: flex; align-items: center; }
 
         /* --- Sidebar --- */
         .sidebar { 
@@ -96,8 +98,15 @@
     <div id="loginScreen" class="login-screen">
         <div class="login-card">
             <div style="font-size: 40px; margin-bottom: 10px;">🛡️</div>
-            <h2 style="color: var(--ttu-blue); margin:0;">Faculty Portal</h2>
-            <input type="password" id="adminPass" placeholder="Password">
+            <h2 style="color: var(--ttu-blue); margin:0;">Department Portal</h2>
+            
+            <div class="pass-wrapper">
+                <input type="password" id="adminPass" placeholder="Password" style="margin-top:0; padding-right: 45px;">
+                <span class="pass-toggle" onclick="togglePassView()">
+                    <i data-lucide="eye" id="passEyeIcon" size="20"></i>
+                </span>
+            </div>
+
             <button class="btn btn-blue" onclick="verifyAdmin()">Unlock</button>
         </div>
     </div>
@@ -119,7 +128,7 @@
 
             <hr style="margin:20px 0; border: 0; border-top: 1px solid #f1f5f9;">
             
-            <label>Saved Courses for this Section</label>
+            <label>Load History</label>
             <select id="courseHistorySelector" onchange="loadCourseFromHistory()"></select>
             
             <label>Course Name</label>
@@ -132,7 +141,7 @@
             <input type="date" id="dateFilter" onchange="switchMode('daily')">
             
             <!-- TIME LIMIT CONTROLS -->
-            <label>Session Duration</label>
+            <label>Attendance Duration</label>
             <select id="durationInput">
                 <option value="5">5 Minutes</option>
                 <option value="10" selected>10 Minutes</option>
@@ -144,7 +153,7 @@
 
             <div id="sessionTimer">⏳ Closes in: <span id="timeLeft">00:00</span></div>
 
-            <!-- QR CODE -->
+            <!-- QR CODE (Always Generated & Displayed) -->
             <img id="qrImage" alt="QR Code">
             
             <button class="btn btn-blue" id="gpsBtn" onclick="updateRoomGPS()"><i data-lucide="map-pin"></i> Sync Room GPS & Open</button>
@@ -186,10 +195,27 @@
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
         const supabase = createClient('https://tnscsgqogoqrwdohytki.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRuc2NzZ3FvZ29xcndkb2h5dGtpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MTcwMjQsImV4cCI6MjA5NTE5MzAyNH0.Xy-QKWBrYXIMP7M_lBmW4SnUxlBpnbm_Poatd8W5Ph4');
 
+        // Immediately render icons (makes the eye icon visible right away)
+        lucide.createIcons();
+
         let allSavedClasses = [];
         let currentMode = 'daily';
         let countdownTimer = null;
-        
+
+        // Eye Icon Toggle Function
+        window.togglePassView = () => {
+            const passInput = document.getElementById('adminPass');
+            const icon = document.getElementById('passEyeIcon');
+            if (passInput.type === 'password') {
+                passInput.type = 'text';
+                icon.setAttribute('data-lucide', 'eye-off');
+            } else {
+                passInput.type = 'password';
+                icon.setAttribute('data-lucide', 'eye');
+            }
+            lucide.createIcons();
+        };
+
         window.toggleSidebar = () => {
             const isAct = document.getElementById('sidebar').classList.toggle('active');
             document.getElementById('overlay').classList.toggle('active');
@@ -211,17 +237,15 @@
         const todayStr = new Date().toISOString().split('T')[0];
         document.getElementById('dateFilter').value = todayStr;
 
-        // When Level or Department changes
         window.contextChanged = () => { 
-            updateHistoryList();
-            autoLoadCurrentSectionClass();
+            updateHistoryList(); 
+            autoLoadCurrentSection();
             switchMode('daily'); 
         };
 
-        // When Section changes (A -> B, etc.), automatically load Section B's specific course
         window.sectionChanged = () => {
             updateHistoryList();
-            autoLoadCurrentSectionClass();
+            autoLoadCurrentSection();
             refresh();
         };
 
@@ -230,12 +254,12 @@
             if (data) { 
                 allSavedClasses = data; 
                 updateHistoryList(); 
-                autoLoadCurrentSectionClass();
+                autoLoadCurrentSection();
                 refresh(); 
             }
         }
 
-        // STRICTLY FILTER BY THIS SPECIFIC LEVEL, DEPT, AND SECTION
+        // Filter courses strictly by Level, Dept, and Section
         window.updateHistoryList = () => {
             const level = document.getElementById('levelInput').value.trim();
             const dept = document.getElementById('deptInput').value.trim();
@@ -261,31 +285,28 @@
             }
         };
 
-        // AUTOMATICALLY LOAD ONLY THIS SECTION'S DETAILS
-        window.autoLoadCurrentSectionClass = () => {
+        // Automatically load this section's own course, or leave blank if none exists yet
+        window.autoLoadCurrentSection = () => {
             const level = document.getElementById('levelInput').value.trim();
             const dept = document.getElementById('deptInput').value.trim();
             const section = document.getElementById('sectionInput').value.trim();
 
-            const matches = allSavedClasses.filter(c => 
+            const match = allSavedClasses.find(c => 
                 String(c.level).trim() === level && 
                 String(c.department).trim().toLowerCase() === dept.toLowerCase() && 
                 String(c.section).trim().toUpperCase() === section.toUpperCase()
             );
 
-            if (matches.length > 0) {
-                // Load this section's own saved course!
-                const latest = matches[0];
-                document.getElementById('classNameInput').value = latest.name;
-                document.getElementById('lecturerNameInput').value = latest.lecturer_name || "";
-                if (latest.expires_at && new Date(latest.expires_at) > new Date()) {
-                    startCountdownDisplay(latest.expires_at);
+            if (match) {
+                document.getElementById('classNameInput').value = match.name;
+                document.getElementById('lecturerNameInput').value = match.lecturer_name || "";
+                if (match.expires_at && new Date(match.expires_at) > new Date()) {
+                    startCountdownDisplay(match.expires_at);
                 } else {
                     document.getElementById('sessionTimer').style.display = 'none';
                     document.getElementById('stopBtn').style.display = 'none';
                 }
             } else {
-                // If Section has no course saved yet, LEAVE BLANK so other sections don't bleed in
                 document.getElementById('classNameInput').value = "";
                 document.getElementById('lecturerNameInput').value = "";
                 document.getElementById('sessionTimer').style.display = 'none';
@@ -334,6 +355,7 @@
             refresh();
         };
 
+        // QR CODE IS ALWAYS GENERATED AND DISPLAYED HERE
         window.refresh = async () => {
             const l = document.getElementById('levelInput').value;
             const d = document.getElementById('deptInput').value;
@@ -341,20 +363,19 @@
             const s = document.getElementById('sectionInput').value;
             const dt = document.getElementById('dateFilter').value;
 
+            const cid = `${d}_${l}_${c.replace(/\s+/g, '_')}_${s}`.toLowerCase();
+            
+            // Generate QR Code immediately (original behavior)
+            const studentUrl = `https://ttu-attendance-portal.github.io/attendance-system/?class=${cid}`;
+            document.getElementById('qrImage').src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(studentUrl)}`;
+
             if (!c) {
-                document.getElementById('qrImage').src = "";
-                document.getElementById('mainTitle').innerText = `Select or type course for Section ${s}`;
+                document.getElementById('mainTitle').innerText = `Section ${s} Attendance`;
                 document.getElementById('subTitle').innerText = `${d} | Level ${l} | Section ${s}`;
-                document.getElementById('list').innerHTML = "<tr><td colspan='4' style='text-align:center; padding:40px;'>Select or enter a course to view records.</td></tr>";
+                document.getElementById('list').innerHTML = "<tr><td colspan='4' style='text-align:center; padding:40px;'>Enter a course name to load records.</td></tr>";
                 document.getElementById('count').innerText = 0;
                 return;
             }
-
-            const cid = `${d}_${l}_${c.replace(/\s+/g, '_')}_${s}`.toLowerCase();
-            
-            // Update QR Code
-            const studentUrl = `https://ttu-attendance-portal.github.io/attendance-system/?class=${cid}`;
-            document.getElementById('qrImage').src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(studentUrl)}`;
 
             if (currentMode === 'daily') {
                 const st = `${dt}T00:00:00.000Z`, en = `${dt}T23:59:59.999Z`;
@@ -378,7 +399,7 @@
             lucide.createIcons();
         };
 
-        // --- GPS SYNC WITH BULLETPROOF TIMEOUT & INDEPENDENT SECTION SAVING ---
+        // --- GPS SYNC (With Fast 10s Timeout so it NEVER hangs) ---
         window.updateRoomGPS = () => {
             const l = document.getElementById('levelInput').value.trim();
             const d = document.getElementById('deptInput').value.trim();
@@ -387,91 +408,49 @@
             const lec = document.getElementById('lecturerNameInput').value.trim();
             const durationMins = parseInt(document.getElementById('durationInput').value) || 10;
 
-            if(!c || !lec) return alert("Please fill in both Course Name and Lecturer Name!");
+            if(!c || !lec) return alert("Fill course and lecturer details!");
 
             const cid = `${d}_${l}_${c.replace(/\s+/g, '_')}_${s}`.toLowerCase();
             const btn = document.getElementById('gpsBtn'); 
             btn.innerHTML = "⏳ Syncing GPS..."; 
             btn.disabled = true;
 
-            let isHandled = false;
+            navigator.geolocation.getCurrentPosition(async (p) => {
+                const expiresAt = new Date(Date.now() + durationMins * 60 * 1000).toISOString();
 
-            // Safety emergency timeout: never leave the button stuck
-            const emergencyTimer = setTimeout(() => {
-                if (!isHandled) {
-                    isHandled = true;
+                const { error } = await supabase.from('classes').upsert({ 
+                    id: cid, 
+                    name: c, 
+                    department: d, 
+                    level: l, 
+                    section: s, 
+                    lecturer_name: lec, 
+                    lat: p.coords.latitude, 
+                    lng: p.coords.longitude,
+                    expires_at: expiresAt 
+                });
+
+                if (error) {
+                    alert("Database Error: " + error.message);
                     btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open';
                     btn.disabled = false;
                     lucide.createIcons();
-                    alert("GPS took too long to respond. Please ensure location is enabled and try again.");
+                    return;
                 }
-            }, 12000);
 
-            const saveLocation = async (pos) => {
-                if (isHandled) return;
-                isHandled = true;
-                clearTimeout(emergencyTimer);
-
-                try {
-                    const expiresAt = new Date(Date.now() + durationMins * 60 * 1000).toISOString();
-
-                    // Saves strictly for THIS section
-                    const { error } = await supabase.from('classes').upsert({ 
-                        id: cid, 
-                        name: c, 
-                        department: d, 
-                        level: l, 
-                        section: s, 
-                        lecturer_name: lec, 
-                        lat: pos.coords.latitude, 
-                        lng: pos.coords.longitude,
-                        expires_at: expiresAt 
-                    });
-
-                    if (error) {
-                        alert("❌ Save error: " + error.message);
-                        btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open';
-                        btn.disabled = false;
-                        lucide.createIcons();
-                        return;
-                    }
-
-                    startCountdownDisplay(expiresAt);
-                    alert(`✅ GPS Saved for Section ${s}! Session open for ${durationMins} minutes.`); 
-                    if(window.innerWidth < 1024) toggleSidebar(); 
-                    await loadAllClassesFromDB(); 
-                    btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open'; 
-                    btn.disabled = false;
-                    lucide.createIcons();
-                } catch (err) {
-                    alert("Error saving: " + err.message);
-                    btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open';
-                    btn.disabled = false;
-                    lucide.createIcons();
-                }
-            };
-
-            // Try high accuracy with an 8s timeout; if it fails (indoors/laptop), fall back to standard accuracy
-            navigator.geolocation.getCurrentPosition(
-                saveLocation, 
-                () => {
-                    // Fallback to standard location (works indoors & on PC Wi-Fi)
-                    navigator.geolocation.getCurrentPosition(
-                        saveLocation,
-                        (err) => {
-                            if (isHandled) return;
-                            isHandled = true;
-                            clearTimeout(emergencyTimer);
-                            btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open';
-                            btn.disabled = false;
-                            lucide.createIcons();
-                            alert("❌ GPS Lock Failed: " + err.message + ". Please allow location access.");
-                        },
-                        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
-                    );
-                }, 
-                { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
-            );
+                startCountdownDisplay(expiresAt);
+                alert(`Room GPS Updated for Section ${s}! Session open for ${durationMins} minutes.`); 
+                if(window.innerWidth < 1024) toggleSidebar(); 
+                await loadAllClassesFromDB(); 
+                btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open'; 
+                btn.disabled = false;
+                lucide.createIcons();
+            }, (e) => { 
+                alert("GPS Lock Failed: " + e.message); 
+                btn.disabled = false; 
+                btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open';
+                lucide.createIcons();
+            }, { enableHighAccuracy: false, timeout: 10000 });
         };
 
         function startCountdownDisplay(expiresAtStr) {
