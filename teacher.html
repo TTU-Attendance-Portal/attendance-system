@@ -153,7 +153,7 @@
 
             <div id="sessionTimer">⏳ Closes in: <span id="timeLeft">00:00</span></div>
 
-            <!-- QR CODE (Always Generated & Displayed) -->
+            <!-- QR CODE -->
             <img id="qrImage" alt="QR Code">
             
             <button class="btn btn-blue" id="gpsBtn" onclick="updateRoomGPS()"><i data-lucide="map-pin"></i> Sync Room GPS & Open</button>
@@ -191,18 +191,19 @@
         </div>
     </div>
 
+    <!-- THIS IS THE SCRIPT AT THE BOTTOM -->
     <script type="module">
         import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
         const supabase = createClient('https://tnscsgqogoqrwdohytki.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRuc2NzZ3FvZ29xcndkb2h5dGtpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MTcwMjQsImV4cCI6MjA5NTE5MzAyNH0.Xy-QKWBrYXIMP7M_lBmW4SnUxlBpnbm_Poatd8W5Ph4');
 
-        // Immediately render icons (makes the eye icon visible right away)
+        // Immediately render icons on page load
         lucide.createIcons();
 
         let allSavedClasses = [];
         let currentMode = 'daily';
         let countdownTimer = null;
 
-        // Eye Icon Toggle Function
+        // Password Show/Hide toggle
         window.togglePassView = () => {
             const passInput = document.getElementById('adminPass');
             const icon = document.getElementById('passEyeIcon');
@@ -259,7 +260,6 @@
             }
         }
 
-        // Filter courses strictly by Level, Dept, and Section
         window.updateHistoryList = () => {
             const level = document.getElementById('levelInput').value.trim();
             const dept = document.getElementById('deptInput').value.trim();
@@ -285,7 +285,6 @@
             }
         };
 
-        // Automatically load this section's own course, or leave blank if none exists yet
         window.autoLoadCurrentSection = () => {
             const level = document.getElementById('levelInput').value.trim();
             const dept = document.getElementById('deptInput').value.trim();
@@ -355,7 +354,7 @@
             refresh();
         };
 
-        // QR CODE IS ALWAYS GENERATED AND DISPLAYED HERE
+        // REFRESH & LOAD ATTENDANCE RECORDS
         window.refresh = async () => {
             const l = document.getElementById('levelInput').value;
             const d = document.getElementById('deptInput').value;
@@ -365,7 +364,7 @@
 
             const cid = `${d}_${l}_${c.replace(/\s+/g, '_')}_${s}`.toLowerCase();
             
-            // Generate QR Code immediately (original behavior)
+            // QR Code
             const studentUrl = `https://ttu-attendance-portal.github.io/attendance-system/?class=${cid}`;
             document.getElementById('qrImage').src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(studentUrl)}`;
 
@@ -379,9 +378,22 @@
 
             if (currentMode === 'daily') {
                 const st = `${dt}T00:00:00.000Z`, en = `${dt}T23:59:59.999Z`;
-                const { data } = await supabase.from('attendance').select('*').eq('class_id', cid).gte('created_at', st).lte('created_at', en).order('created_at', {ascending: false});
+                const { data } = await supabase.from('attendance')
+                    .select('*')
+                    .eq('class_id', cid)
+                    .gte('created_at', st)
+                    .lte('created_at', en)
+                    .order('created_at', { ascending: false });
+
                 document.getElementById('count').innerText = data ? data.length : 0;
-                document.getElementById('list').innerHTML = data?.map(x => `<tr><td style="color:#64748b; font-size:12px;">${new Date(x.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</td><td><b>${x.student}</b></td><td><code>${x.index_number}</code></td><td><span class="mode-badge mode-daily">Verified</span></td></tr>`).join('') || "<tr><td colspan='4' style='text-align:center; padding:40px;'>No records found.</td></tr>";
+                document.getElementById('list').innerHTML = data?.map(x => `
+                    <tr>
+                        <td style="color:#64748b; font-size:12px;">${new Date(x.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</td>
+                        <td><b>${x.student}</b></td>
+                        <td><code>${x.index_number}</code></td>
+                        <td><span class="mode-badge mode-daily">Verified</span></td>
+                    </tr>
+                `).join('') || "<tr><td colspan='4' style='text-align:center; padding:40px;'>No records found.</td></tr>";
             } else {
                 const { data } = await supabase.from('attendance').select('student, index_number').eq('class_id', cid);
                 const summary = {};
@@ -391,7 +403,14 @@
                 });
                 const sorted = Object.entries(summary).sort((a, b) => b[1].count - a[1].count);
                 document.getElementById('count').innerText = sorted.length;
-                document.getElementById('list').innerHTML = sorted.map(([index, info], i) => `<tr><td>#${i+1}</td><td><b>${info.name}</b></td><td><code>${index}</code></td><td><span style="font-weight:bold; color:var(--ttu-blue)">${info.count} Weeks</span></td></tr>`).join('') || "<tr><td colspan='4' style='text-align:center; padding:40px;'>No compilation data.</td></tr>";
+                document.getElementById('list').innerHTML = sorted.map(([index, info], i) => `
+                    <tr>
+                        <td>#${i+1}</td>
+                        <td><b>${info.name}</b></td>
+                        <td><code>${index}</code></td>
+                        <td><span style="font-weight:bold; color:var(--ttu-blue)">${info.count} Weeks</span></td>
+                    </tr>
+                `).join('') || "<tr><td colspan='4' style='text-align:center; padding:40px;'>No compilation data.</td></tr>";
             }
             
             document.getElementById('mainTitle').innerText = `${c} (Sec ${s})`;
@@ -399,7 +418,7 @@
             lucide.createIcons();
         };
 
-        // --- GPS SYNC (With Fast 10s Timeout so it NEVER hangs) ---
+        // GPS SYNC
         window.updateRoomGPS = () => {
             const l = document.getElementById('levelInput').value.trim();
             const d = document.getElementById('deptInput').value.trim();
@@ -432,7 +451,7 @@
 
                 if (error) {
                     alert("Database Error: " + error.message);
-                    btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open';
+                    btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS';
                     btn.disabled = false;
                     lucide.createIcons();
                     return;
@@ -442,13 +461,13 @@
                 alert(`Room GPS Updated for Section ${s}! Session open for ${durationMins} minutes.`); 
                 if(window.innerWidth < 1024) toggleSidebar(); 
                 await loadAllClassesFromDB(); 
-                btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open'; 
+                btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS'; 
                 btn.disabled = false;
                 lucide.createIcons();
             }, (e) => { 
                 alert("GPS Lock Failed: " + e.message); 
                 btn.disabled = false; 
-                btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open';
+                btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS';
                 lucide.createIcons();
             }, { enableHighAccuracy: false, timeout: 10000 });
         };
@@ -507,7 +526,20 @@
             ln.download = `TTU_${c}_Sec${s}_${currentMode}.csv`; ln.click();
         };
 
-        supabase.channel('db').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'attendance' }, () => { if(currentMode === 'daily') refresh(); }).subscribe();
+        // 1. SUPABASE REALTIME (Updates immediately)
+        supabase.channel('attendance-live')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, () => {
+                if(currentMode === 'daily') refresh();
+            })
+            .subscribe();
+
+        // 2. AUTO-POLLING BACKUP (Checks every 3 seconds so attendance is guaranteed to show live)
+        setInterval(() => {
+            const adminOpen = document.getElementById('adminWrapper').style.display === 'block';
+            if (adminOpen && currentMode === 'daily') {
+                refresh();
+            }
+        }, 3000);
     </script>
 </body>
 </html>
