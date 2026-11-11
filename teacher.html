@@ -2,168 +2,400 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lecturer Admin | TTU Attendance Control</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Faculty Admin | TTU Engineering</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
     <style>
-        :root { --ttu-blue: #004085; --ttu-gold: #ffc107; --bg: #f1f5f9; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); margin: 0; padding: 20px; display: flex; justify-content: center; }
-        .card { background: white; padding: 2rem; border-radius: 1.2rem; box-shadow: 0 8px 20px rgba(0,0,0,0.06); width: 100%; max-width: 450px; text-align: center; }
-        h2 { color: var(--ttu-blue); margin-top: 0; }
-        label { display: block; text-align: left; font-size: 0.8rem; font-weight: bold; color: #475569; margin: 12px 0 6px; }
-        select, button { width: 100%; padding: 0.85rem; border-radius: 0.6rem; font-size: 1rem; box-sizing: border-box; }
-        select { border: 1px solid #cbd5e1; margin-bottom: 10px; }
-        .btn-start { background: var(--ttu-blue); color: white; border: none; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        .btn-close { background: #dc2626; color: white; border: none; font-weight: bold; cursor: pointer; margin-top: 10px; display: none; }
-        #timer-box { margin-top: 15px; font-size: 1.2rem; font-weight: bold; color: #dc2626; display: none; }
-        #qrcode { margin: 20px auto; display: flex; justify-content: center; }
-        .status { padding: 10px; border-radius: 6px; font-size: 0.85rem; margin-top: 10px; font-weight: 600; }
-        .info { background: #e0f2fe; color: #0369a1; }
-        .success { background: #f0fdf4; color: #16a34a; }
+        :root {
+            --ttu-blue: #004085;
+            --ttu-gold: #ffc107;
+            --ttu-light-blue: #e0f2fe;
+            --ttu-text: #1e293b;
+            --ttu-sidebar: #ffffff;
+            --ttu-bg: #f4f7fa;
+            --ttu-success: #10b981;
+        }
+
+        #adminWrapper { display: none; }
+        body.menu-open { overflow: hidden !important; touch-action: none; position: fixed; width: 100%; }
+
+        body { 
+            font-family: 'Inter', sans-serif; background: var(--ttu-bg); margin: 0; 
+            width: 100vw; height: 100dvh; overflow-x: hidden; color: var(--ttu-text); 
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* --- Login Screen --- */
+        .login-screen { display: flex; justify-content: center; align-items: center; height: 100dvh; background: linear-gradient(135deg, var(--ttu-blue) 0%, #001a35 100%); position: fixed; width: 100%; top: 0; left: 0; z-index: 9999; }
+        .login-card { background: white; padding: 3rem 2rem; border-radius: 2rem; width: 85%; max-width: 350px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+
+        /* --- Rock Solid Sidebar --- */
+        .sidebar { 
+            width: 310px; background: var(--ttu-sidebar); height: 100dvh; padding: 25px; border-right: 1px solid #e2e8f0; 
+            position: fixed; top: 0; left: 0; box-sizing: border-box; 
+            overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; 
+            transform: translate3d(0, 0, 0); transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); 
+            z-index: 4000;
+        }
+
+        .content { margin-left: 310px; padding: 40px; transition: 0.3s ease; min-height: 100dvh; }
+
+        @media (max-width: 1024px) {
+            .sidebar { transform: translate3d(-105%, 0, 0); width: 290px; }
+            .sidebar.active { transform: translate3d(0, 0, 0); box-shadow: 20px 0 50px rgba(0,0,0,0.2); }
+            .content { margin-left: 0; padding: 20px; padding-top: 85px; }
+            .menu-toggle { display: flex !important; }
+        }
+
+        /* --- UI Components --- */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 15px; margin-bottom: 25px; }
+        .stat-card { background: white; padding: 18px; border-radius: 1.2rem; border: 1px solid #f1f5f9; display: flex; align-items: center; gap: 12px; }
+        
+        label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-top: 14px; display: block; }
+        input, select { width: 100%; padding: 12px; margin-top: 5px; border: 1px solid #e2e8f0; border-radius: 12px; font-size: 16px; background: #f8fafc; color: var(--ttu-text); appearance: none; -webkit-appearance: none; outline: none; }
+
+        .btn { padding: 14px; width: 100%; border: none; border-radius: 12px; cursor: pointer; font-weight: 700; margin-top: 12px; transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px; }
+        .btn-blue { background: var(--ttu-blue); color: white; }
+        .btn-gold { background: var(--ttu-gold); color: #000; }
+        .btn-green { background: var(--ttu-success); color: white; }
+        .btn-stop { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
+        .btn-red { background: #fef2f2; color: #ef4444; font-size: 13px; margin-top: 25px; }
+
+        /* Timer Badge */
+        #sessionTimer { 
+            display: none; margin-top: 10px; padding: 10px; border-radius: 10px; 
+            background: #fef2f2; border: 1px solid #fecaca; text-align: center; 
+            color: #dc2626; font-weight: 700; font-size: 13px; 
+        }
+
+        .table-container { background: white; border-radius: 1.2rem; overflow-x: auto; border: 1px solid #e2e8f0; -webkit-overflow-scrolling: touch; }
+        table { width: 100%; border-collapse: collapse; min-width: 450px; }
+        th { background: #f8fafc; padding: 15px; text-align: left; font-size: 11px; color: #64748b; text-transform: uppercase; }
+        td { padding: 15px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+
+        .menu-toggle { display: none; position: fixed; top: 20px; left: 20px; background: var(--ttu-blue); color: white; border: none; width: 50px; height: 50px; border-radius: 15px; align-items: center; justify-content: center; z-index: 5000; box-shadow: 0 10px 20px rgba(0,64,133,0.3); }
+        .sidebar-overlay { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.4); z-index: 3500; backdrop-filter: blur(4px); touch-action: none; }
+        .sidebar-overlay.active { display: block; }
+
+        #qrImage { width: 150px; height: 150px; margin: 20px auto; display: block; border-radius: 15px; padding: 5px; background: white; border: 1px solid #eee; }
+        .pulse-dot { width: 8px; height: 8px; background: var(--ttu-success); border-radius: 50%; display: inline-block; animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+        
+        .mode-badge { padding: 4px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+        .mode-daily { background: #e0f2fe; color: #0369a1; }
+        .mode-semester { background: #fef3c7; color: #92400e; }
     </style>
 </head>
 <body>
 
-<div class="card">
-    <h2>Lecturer Control Panel</h2>
-    <p style="font-size: 0.85rem; color: #64748b;">Set GPS and time duration for students to scan.</p>
+    <!-- 1. LOGIN -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-card">
+            <div style="font-size: 40px; margin-bottom: 10px;">🛡️</div>
+            <h2 style="color: var(--ttu-blue); margin:0;">Faculty Portal</h2>
+            <input type="password" id="adminPass" placeholder="Password">
+            <button class="btn btn-blue" onclick="verifyAdmin()">Unlock</button>
+        </div>
+    </div>
 
-    <label>1. Select Class</label>
-    <select id="class-select">
-        <option value="">-- Choose Class --</option>
-    </select>
+    <!-- 2. DASHBOARD -->
+    <div id="adminWrapper">
+        <div class="sidebar-overlay" id="overlay" onclick="toggleSidebar()"></div>
+        <button class="menu-toggle" id="mBtn" onclick="toggleSidebar()"><i data-lucide="menu"></i></button>
 
-    <label>2. Attendance Duration</label>
-    <select id="duration-select">
-        <option value="5">5 Minutes</option>
-        <option value="10" selected>10 Minutes</option>
-        <option value="15">15 Minutes</option>
-        <option value="20">20 Minutes</option>
-        <option value="30">30 Minutes</option>
-    </select>
-
-    <button id="start-btn" class="btn-start" onclick="openAttendanceSession()">📍 Capture GPS & Open Session</button>
-    <button id="close-btn" class="btn-close" onclick="closeAttendanceSession()">🛑 End Attendance Early</button>
-
-    <div id="status" class="status info">Ready to initialize</div>
-    <div id="timer-box">⏳ Time Left: <span id="time-left">00:00</span></div>
-
-    <!-- QR Code container for students to scan -->
-    <div id="qrcode"></div>
-    <div id="student-link" style="word-break: break-all; font-size: 0.8rem; color: #0284c7;"></div>
-</div>
-
-<script type="module">
-    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
-    const supabase = createClient('https://tnscsgqogoqrwdohytki.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRuc2NzZ3FvZ29xcndkb2h5dGtpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MTcwMjQsImV4cCI6MjA5NTE5MzAyNH0.Xy-QKWBrYXIMP7M_lBmW4SnUxlBpnbm_Poatd8W5Ph4');
-
-    let countdownInterval;
-
-    // Load available classes from Supabase
-    async function loadClasses() {
-        const { data, error } = await supabase.from('classes').select('id, name');
-        if (data) {
-            const select = document.getElementById('class-select');
-            data.forEach(c => {
-                const opt = document.createElement('option');
-                opt.value = c.id;
-                opt.innerText = c.name;
-                select.appendChild(opt);
-            });
-        }
-    }
-    loadClasses();
-
-    window.openAttendanceSession = function() {
-        const classId = document.getElementById('class-select').value;
-        const minutes = parseInt(document.getElementById('duration-select').value);
-        const status = document.getElementById('status');
-
-        if (!classId) return alert("Please select a class first!");
-
-        status.innerText = "Acquiring your GPS location...";
-
-        navigator.geolocation.getCurrentPosition(async (pos) => {
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
-
-            // Calculate expiration time (current time + selected minutes)
-            const expiresAt = new Date(Date.now() + minutes * 60 * 1000).toISOString();
-
-            // Update database with lecturer's GPS and expiration time
-            const { error } = await supabase.from('classes').update({
-                lat: lat,
-                lng: lng,
-                expires_at: expiresAt
-            }).eq('id', classId);
-
-            if (error) {
-                alert("Error updating class: " + error.message);
-                return;
-            }
-
-            status.innerText = `✅ Session active for ${minutes} minutes!`;
-            status.className = "status success";
-
-            // Generate Student URL and QR code
-            // Change "student.html" to the actual name/URL of your student page
-            const studentUrl = `${window.location.origin}/student.html?class=${classId}`;
+        <div class="sidebar" id="sidebar">
+            <h3 style="color: var(--ttu-blue); margin:0 0 20px 0; display: flex; align-items: center; gap: 8px;"><i data-lucide="award"></i> Admin Panel</h3>
             
-            document.getElementById('qrcode').innerHTML = "";
-            new QRCode(document.getElementById("qrcode"), {
-                text: studentUrl,
-                width: 180,
-                height: 180
-            });
-            document.getElementById('student-link').innerText = studentUrl;
+            <label>Level & Department</label>
+            <select id="levelInput" onchange="contextChanged()"><option>100</option><option>200</option><option selected>300</option><option>400</option></select>
+            <select id="deptInput" onchange="contextChanged()"><option>Mechanical</option><option>Electrical</option><option>Civil</option><option>Petroleum</option></select>
 
-            // Start Live Countdown
-            document.getElementById('start-btn').style.display = "none";
-            document.getElementById('close-btn').style.display = "block";
-            startCountdown(expiresAt);
+            <hr style="margin:20px 0; border: 0; border-top: 1px solid #f1f5f9;">
+            
+            <label>Load History</label>
+            <select id="courseHistorySelector" onchange="loadCourseFromHistory()"></select>
+            
+            <label>Course Name</label>
+            <input type="text" id="classNameInput" placeholder="eg. Thermodynamics" oninput="refresh()">
 
-        }, (err) => {
-            alert("Could not access GPS. Please enable location permissions.");
-        }, { enableHighAccuracy: true });
-    };
+            <label>Section & Lecturer</label>
+            <select id="sectionInput" onchange="autoLoadLecturer(); refresh();"><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option><option>F</option></select>
+            <input type="text" id="lecturerNameInput" placeholder="Lecturer Name">
 
-    function startCountdown(expiresAtIso) {
-        const timerBox = document.getElementById('timer-box');
-        const timeLeftSpan = document.getElementById('time-left');
-        timerBox.style.display = 'block';
+            <label>Select Date</label>
+            <input type="date" id="dateFilter" onchange="switchMode('daily')">
+            
+            <!-- TIME LIMIT CONTROLS -->
+            <label>Session Duration</label>
+            <select id="durationInput">
+                <option value="5">5 Minutes</option>
+                <option value="10" selected>10 Minutes</option>
+                <option value="15">15 Minutes</option>
+                <option value="20">20 Minutes</option>
+                <option value="30">30 Minutes</option>
+                <option value="60">1 Hour</option>
+            </select>
 
-        clearInterval(countdownInterval);
-        countdownInterval = setInterval(() => {
-            const diff = new Date(expiresAtIso).getTime() - Date.now();
-            if (diff <= 0) {
-                clearInterval(countdownInterval);
-                timeLeftSpan.innerText = "EXPIRED";
-                document.getElementById('status').innerText = "🛑 Attendance window has closed.";
-                document.getElementById('close-btn').style.display = "none";
-                document.getElementById('start-btn').style.display = "block";
-                return;
+            <div id="sessionTimer">⏳ Closes in: <span id="timeLeft">00:00</span></div>
+
+            <!-- QR CODE -->
+            <img id="qrImage" alt="QR Code">
+            
+            <button class="btn btn-blue" id="gpsBtn" onclick="updateRoomGPS()"><i data-lucide="map-pin"></i> Sync Room GPS & Open</button>
+            <button class="btn btn-stop" id="stopBtn" onclick="endAttendanceEarly()" style="display:none;"><i data-lucide="clock"></i> End Attendance Now</button>
+            
+            <hr style="margin:20px 0; border: 0; border-top: 1px solid #f1f5f9;">
+            
+            <label>Reporting</label>
+            <button class="btn btn-gold" onclick="switchMode('semester')"><i data-lucide="layers"></i> Semester Compiler</button>
+            <button class="btn btn-green" onclick="downloadCSV()"><i data-lucide="file-text"></i> Export View</button>
+            <button class="btn btn-red" onclick="location.reload()">🔒 Logout</button>
+        </div>
+
+        <div class="content">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div style="background: #e0f2fe; color: #0369a1; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center;"><i data-lucide="users" size="20"></i></div>
+                    <div><label style="margin:0" id="countLabel">Present Today</label><div style="font-size: 22px; font-weight: 800;" id="count">0</div></div>
+                </div>
+                <div class="stat-card">
+                    <div style="background: #dcfce7; color: #15803d; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center;"><i data-lucide="radio" size="20"></i></div>
+                    <div><label style="margin:0">Monitoring</label><div id="modeDisplay" class="mode-badge mode-daily">Daily</div></div>
+                </div>
+            </div>
+
+            <h2 id="mainTitle" style="margin:0 0 5px; color: var(--ttu-blue); font-size: 22px;">Attendance Log</h2>
+            <p id="subTitle" style="color:#64748b; margin-bottom: 25px; font-size: 13px; font-weight: 500;"></p>
+            
+            <div class="table-container">
+                <table id="attendanceTable">
+                    <thead><tr id="tableHeader"><th>Time</th><th>Student Name</th><th>Index No.</th><th>Status</th></tr></thead>
+                    <tbody id="list"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
+        const supabase = createClient('https://tnscsgqogoqrwdohytki.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRuc2NzZ3FvZ29xcndkb2h5dGtpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MTcwMjQsImV4cCI6MjA5NTE5MzAyNH0.Xy-QKWBrYXIMP7M_lBmW4SnUxlBpnbm_Poatd8W5Ph4');
+
+        let allSavedClasses = [];
+        let currentMode = 'daily';
+        let countdownTimer = null;
+        
+        window.toggleSidebar = () => {
+            const isAct = document.getElementById('sidebar').classList.toggle('active');
+            document.getElementById('overlay').classList.toggle('active');
+            if (isAct) document.body.classList.add('menu-open');
+            else document.body.classList.remove('menu-open');
+            document.getElementById('mBtn').innerHTML = isAct ? '<i data-lucide="x"></i>' : '<i data-lucide="menu"></i>';
+            lucide.createIcons();
+        };
+
+        window.verifyAdmin = () => {
+            if (document.getElementById('adminPass').value === "TTUattendance@50") {
+                document.getElementById('loginScreen').style.display = "none";
+                document.getElementById('adminWrapper').style.display = "block";
+                loadAllClassesFromDB(); 
+                lucide.createIcons();
+            } else alert("Denied");
+        };
+
+        // Initialize Date
+        const todayStr = new Date().toISOString().split('T')[0];
+        document.getElementById('dateFilter').value = todayStr;
+
+        window.contextChanged = () => { 
+            document.getElementById('classNameInput').value = ""; 
+            document.getElementById('lecturerNameInput').value = ""; 
+            updateHistoryList(); 
+            switchMode('daily'); 
+        };
+
+        async function loadAllClassesFromDB() {
+            const { data } = await supabase.from('classes').select('*').order('name');
+            if (data) { allSavedClasses = data; updateHistoryList(); refresh(); }
+        }
+
+        window.updateHistoryList = () => {
+            const level = document.getElementById('levelInput').value, dept = document.getElementById('deptInput').value;
+            const matches = allSavedClasses.filter(c => c.level === level && c.department === dept);
+            const uniqueNames = [...new Set(matches.map(c => c.name))];
+            const sel = document.getElementById('courseHistorySelector');
+            sel.innerHTML = uniqueNames.length > 0 ? '<option value="">-- Select Course --</option>' : '<option value="">-- No matches --</option>';
+            uniqueNames.forEach(n => { const o = document.createElement('option'); o.value = n; o.innerText = n; sel.appendChild(o); });
+        };
+
+        window.loadCourseFromHistory = () => {
+            const n = document.getElementById('courseHistorySelector').value;
+            if (!n) return; document.getElementById('classNameInput').value = n; autoLoadLecturer();
+        };
+
+        window.autoLoadLecturer = () => {
+            const n = document.getElementById('classNameInput').value, s = document.getElementById('sectionInput').value, l = document.getElementById('levelInput').value, d = document.getElementById('deptInput').value;
+            if (!n) return;
+            const match = allSavedClasses.find(c => c.name === n && c.section === s && c.level === l && c.department === d);
+            if (match) {
+                document.getElementById('lecturerNameInput').value = match.lecturer_name;
+                // If there is an active session, display the timer
+                if (match.expires_at && new Date(match.expires_at) > new Date()) {
+                    startCountdownDisplay(match.expires_at);
+                }
+            } else { 
+                const generic = allSavedClasses.find(c => c.name === n && c.level === l && c.department === d); 
+                document.getElementById('lecturerNameInput').value = generic ? generic.lecturer_name : ""; 
             }
+            refresh();
+        };
 
-            const m = Math.floor(diff / 60000);
-            const s = Math.floor((diff % 60000) / 1000);
-            timeLeftSpan.innerText = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-        }, 1000);
-    }
+        window.switchMode = (mode) => {
+            currentMode = mode;
+            const display = document.getElementById('modeDisplay');
+            if (mode === 'daily') {
+                display.innerText = "Daily"; display.className = "mode-badge mode-daily";
+                document.getElementById('countLabel').innerText = "Present Today";
+                document.getElementById('tableHeader').innerHTML = "<th>Time</th><th>Student Name</th><th>Index No.</th><th>Status</th>";
+            } else {
+                display.innerText = "Semester"; display.className = "mode-badge mode-semester";
+                document.getElementById('countLabel').innerText = "Unique Total";
+                document.getElementById('tableHeader').innerHTML = "<th>Rank</th><th>Student Name</th><th>Index No.</th><th>Total Presence</th>";
+            }
+            if(window.innerWidth < 1024 && mode === 'semester') toggleSidebar();
+            refresh();
+        }
 
-    window.closeAttendanceSession = async function() {
-        const classId = document.getElementById('class-select').value;
-        if (!confirm("Are you sure you want to end attendance now?")) return;
+        window.refresh = async () => {
+            const l = document.getElementById('levelInput').value, d = document.getElementById('deptInput').value, c = document.getElementById('classNameInput').value, s = document.getElementById('sectionInput').value, dt = document.getElementById('dateFilter').value;
+            const cid = `${d}_${l}_${c.replace(/\s+/g, '_')}_${s}`.toLowerCase();
+            
+            // Update QR Code
+            const studentUrl = `https://ttu-attendance-portal.github.io/attendance-system/?class=${cid}`;
+            document.getElementById('qrImage').src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(studentUrl)}`;
+            
+            if (!c) return;
 
-        // Set expires_at to right now
-        await supabase.from('classes').update({ expires_at: new Date().toISOString() }).eq('id', classId);
-        clearInterval(countdownInterval);
-        document.getElementById('timer-box').style.display = "none";
-        document.getElementById('close-btn').style.display = "none";
-        document.getElementById('start-btn').style.display = "block";
-        document.getElementById('status').innerText = "Session ended manually.";
-    };
-</script>
+            if (currentMode === 'daily') {
+                const st = `${dt}T00:00:00.000Z`, en = `${dt}T23:59:59.999Z`;
+                const { data } = await supabase.from('attendance').select('*').eq('class_id', cid).gte('created_at', st).lte('created_at', en).order('created_at', {ascending: false});
+                document.getElementById('count').innerText = data ? data.length : 0;
+                document.getElementById('list').innerHTML = data?.map(x => `<tr><td style="color:#64748b; font-size:12px;">${new Date(x.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</td><td><b>${x.student}</b></td><td><code>${x.index_number}</code></td><td><span class="mode-badge mode-daily">Verified</span></td></tr>`).join('') || "<tr><td colspan='4' style='text-align:center; padding:40px;'>No records found.</td></tr>";
+            } else {
+                const { data } = await supabase.from('attendance').select('student, index_number').eq('class_id', cid);
+                const summary = {};
+                data?.forEach(row => {
+                    if (!summary[row.index_number]) summary[row.index_number] = { name: row.student, count: 0 };
+                    summary[row.index_number].count++;
+                });
+                const sorted = Object.entries(summary).sort((a, b) => b[1].count - a[1].count);
+                document.getElementById('count').innerText = sorted.length;
+                document.getElementById('list').innerHTML = sorted.map(([index, info], i) => `<tr><td>#${i+1}</td><td><b>${info.name}</b></td><td><code>${index}</code></td><td><span style="font-weight:bold; color:var(--ttu-blue)">${info.count} Weeks</span></td></tr>`).join('') || "<tr><td colspan='4' style='text-align:center; padding:40px;'>No compilation data.</td></tr>";
+            }
+            
+            document.getElementById('mainTitle').innerText = c || "Attendance Log";
+            document.getElementById('subTitle').innerText = `${d} | L${l} | Sec ${s} | ${document.getElementById('lecturerNameInput').value}`;
+            lucide.createIcons();
+        };
 
+        // --- GPS SYNC & TIME LIMIT ---
+        window.updateRoomGPS = () => {
+            const l = document.getElementById('levelInput').value, d = document.getElementById('deptInput').value, c = document.getElementById('classNameInput').value, s = document.getElementById('sectionInput').value, lec = document.getElementById('lecturerNameInput').value;
+            const durationMins = parseInt(document.getElementById('durationInput').value) || 10;
+
+            if(!c || !lec) return alert("Fill course and lecturer details!");
+            const cid = `${d}_${l}_${c.replace(/\s+/g, '_')}_${s}`.toLowerCase();
+            const btn = document.getElementById('gpsBtn'); 
+            btn.innerHTML = "⏳ Syncing GPS..."; btn.disabled = true;
+
+            navigator.geolocation.getCurrentPosition(async (p) => {
+                // Calculate expiration timestamp (now + chosen minutes)
+                const expiresAt = new Date(Date.now() + durationMins * 60 * 1000).toISOString();
+
+                await supabase.from('classes').upsert({ 
+                    id: cid, 
+                    name: c, 
+                    department: d, 
+                    level: l, 
+                    section: s, 
+                    lecturer_name: lec, 
+                    lat: p.coords.latitude, 
+                    lng: p.coords.longitude,
+                    expires_at: expiresAt 
+                });
+
+                startCountdownDisplay(expiresAt);
+
+                alert(`GPS Updated! Attendance is OPEN for ${durationMins} minutes.`); 
+                if(window.innerWidth < 1024) toggleSidebar(); 
+                loadAllClassesFromDB(); 
+                btn.innerHTML = '<i data-lucide="map-pin"></i> Sync Room GPS & Open'; 
+                btn.disabled = false;
+                lucide.createIcons();
+            }, (e) => { 
+                alert("GPS Lock Failed."); 
+                btn.disabled = false; 
+            }, {enableHighAccuracy:true});
+        };
+
+        function startCountdownDisplay(expiresAtStr) {
+            const timerBox = document.getElementById('sessionTimer');
+            const timeLeftSpan = document.getElementById('timeLeft');
+            const stopBtn = document.getElementById('stopBtn');
+
+            timerBox.style.display = 'block';
+            stopBtn.style.display = 'flex';
+
+            clearInterval(countdownTimer);
+            countdownTimer = setInterval(() => {
+                const diff = new Date(expiresAtStr).getTime() - Date.now();
+                if (diff <= 0) {
+                    clearInterval(countdownTimer);
+                    timeLeftSpan.innerText = "EXPIRED";
+                    stopBtn.style.display = 'none';
+                    return;
+                }
+                const m = Math.floor(diff / 60000);
+                const s = Math.floor((diff % 60000) / 1000);
+                timeLeftSpan.innerText = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            }, 1000);
+        }
+
+        window.endAttendanceEarly = async () => {
+            const l = document.getElementById('levelInput').value, d = document.getElementById('deptInput').value, c = document.getElementById('classNameInput').value, s = document.getElementById('sectionInput').value;
+            const cid = `${d}_${l}_${c.replace(/\s+/g, '_')}_${s}`.toLowerCase();
+            
+            if (!confirm("Are you sure you want to close attendance now?")) return;
+
+            // Set expiration to right now
+            await supabase.from('classes').update({ expires_at: new Date().toISOString() }).eq('id', cid);
+            clearInterval(countdownTimer);
+            document.getElementById('sessionTimer').style.display = 'none';
+            document.getElementById('stopBtn').style.display = 'none';
+            alert("Attendance closed early.");
+        };
+
+        window.downloadCSV = () => {
+            const c = document.getElementById('classNameInput').value || "Report";
+            let csv = currentMode === 'semester' ? "Index,Name,Attendance_Weeks\n" : "Time,Name,Index\n";
+            document.querySelectorAll("#list tr").forEach(tr => { 
+                if (tr.cells.length > 1) {
+                    if (currentMode === 'semester') csv += `${tr.cells[2].innerText},${tr.cells[1].innerText.replace(',','')},${tr.cells[3].innerText.split(' ')[0]}\n`;
+                    else csv += `${tr.cells[0].innerText},${tr.cells[1].innerText.replace(',','')},${tr.cells[2].innerText}\n`;
+                }
+            });
+            const b = new Blob([csv], { type: 'text/csv' });
+            const ln = document.createElement("a"); ln.href = URL.createObjectURL(b); 
+            ln.download = `TTU_${c}_${currentMode}.csv`; ln.click();
+        };
+
+        supabase.channel('db').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'attendance' }, () => { if(currentMode === 'daily') refresh(); }).subscribe();
+    </script>
 </body>
 </html>
