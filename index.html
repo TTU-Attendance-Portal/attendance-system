@@ -160,11 +160,24 @@
     const deviceId = getHardwareID();
 
     async function init() {
-        const { data } = await supabase.from('classes').select('name, expires_at').eq('id', classId).single();
-        document.getElementById('class-title').innerText = data?.name || "Attendance Sign-in";
+        if (classId === 'none') {
+            document.getElementById('main-content').innerHTML = `
+                <h2>❌ Invalid Link</h2>
+                <p>No class was specified. Please scan the official lecturer QR code.</p>
+            `;
+            return;
+        }
+
+        const { data, error } = await supabase.from('classes').select('name, expires_at').eq('id', classId).single();
+        if (error || !data) {
+            document.getElementById('class-title').innerText = "Class Not Found";
+            return;
+        }
+
+        document.getElementById('class-title').innerText = data.name || "Attendance Sign-in";
         
         // 1. CHECK IF TIME EXPIRED
-        if (data?.expires_at) {
+        if (data.expires_at) {
             const isExpired = new Date() > new Date(data.expires_at);
             if (isExpired) {
                 document.getElementById('main-content').innerHTML = `
@@ -184,25 +197,61 @@
     init();
 
     let sLat, sLng;
+    const status = document.getElementById('status-msg');
+    const btn = document.getElementById('submit-btn');
+
     navigator.geolocation.watchPosition(async (pos) => {
-        sLat = pos.coords.latitude; sLng = pos.coords.longitude;
-        const { data: loc } = await supabase.from('classes').select('*').eq('id', classId).single();
-        if (loc?.lat) {
-            const dist = getDist(sLat, sLng, loc.lat, loc.lng);
-            const status = document.getElementById('status-msg');
-            const btn = document.getElementById('submit-btn');
-            
-            if (status && btn) {
-                if (dist <= 0.1) { // 100m
-                    status.innerText = "📍 Location Verified"; status.className = "success";
-                    btn.disabled = false; btn.innerText = "Confirm Attendance";
-                } else {
-                    status.innerText = `❌ Outside Range (${Math.round(dist*1000)}m)`; status.className = "error";
-                    btn.disabled = true; btn.innerText = "Out of Range";
-                }
+        sLat = pos.coords.latitude; 
+        sLng = pos.coords.longitude;
+
+        if (classId === 'none') {
+            if (status) { status.innerText = "❌ Please scan the QR code to sign in."; status.className = "error"; }
+            if (btn) btn.innerText = "Invalid Link";
+            return;
+        }
+
+        const { data: loc, error } = await supabase.from('classes').select('*').eq('id', classId).single();
+        
+        if (error || !loc) {
+            if (status) { status.innerText = "❌ Class not found in database."; status.className = "error"; }
+            if (btn) btn.innerText = "Class Not Found";
+            return;
+        }
+
+        // If lecturer hasn't clicked "Sync Room GPS" yet
+        if (!loc.lat || !loc.lng) {
+            if (status) { status.innerText = "⚠️ Lecturer has not set Room GPS yet!"; status.className = "error"; }
+            if (btn) { btn.disabled = true; btn.innerText = "Awaiting Room GPS..."; }
+            return;
+        }
+
+        const dist = getDist(sLat, sLng, loc.lat, loc.lng);
+        if (status && btn) {
+            if (dist <= 0.1) { // 100m
+                status.innerText = "📍 Location Verified"; 
+                status.className = "success";
+                btn.disabled = false; 
+                btn.innerText = "Confirm Attendance";
+            } else {
+                status.innerText = `❌ Outside Range (${Math.round(dist * 1000)}m away)`; 
+                status.className = "error";
+                btn.disabled = true; 
+                btn.innerText = "Out of Range";
             }
         }
-    }, null, { enableHighAccuracy: true });
+    }, (err) => {
+        if (!status || !btn) return;
+        if (err.code === 1) {
+            status.innerText = "❌ Location permission denied. Please allow GPS access in your browser settings.";
+        } else if (err.code === 2) {
+            status.innerText = "❌ Position unavailable. Ensure your device's Location is ON.";
+        } else {
+            status.innerText = "❌ GPS request timed out. Please try again.";
+        }
+        status.className = "error";
+        btn.disabled = true;
+        btn.innerText = "GPS Error";
+    }, { enableHighAccuracy: true, timeout: 15000 });
 
     function getDist(la1, lo1, la2, lo2) {
         const R = 6371; const dLat = (la2-la1)*Math.PI/180; const dLon = (lo2-lo1)*Math.PI/180;
